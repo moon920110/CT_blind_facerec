@@ -1,5 +1,14 @@
 import cv2
+from gtts import gTTS
+import playsound
+import time
 
+
+def speak(text):
+    tts = gTTS(text=text, lang='ko')
+    filename = 'voice.mp3'
+    tts.save(filename)
+    playsound.playsound(filename, block=False)
 
 class FaceRecog:
     def __init__(self):
@@ -30,6 +39,8 @@ class FaceRecog:
 
     def video_detector(self):
         print("Start Face Recognition")
+        flag_time = time.time()
+        face_flag = 0
         while True:
 
             ret, img = self.cam.read()
@@ -62,6 +73,29 @@ class FaceRecog:
 
                 cv2.rectangle(img, (x, y), (x + w, y + h), (255, 255, 255), thickness=2)
                 cv2.putText(img, info, (x, y - 15), 0, 0.5, (0, 255, 0), 1)
+
+            if len(results) >= 1:
+                if time.time() - flag_time >= 3:
+                    flag_time = time.time()
+                    max_size_face = 0
+                    max_size_face_indicator = 0
+                    for face in range(len(results)):
+                        if results[face][3] >= max_size_face:
+                            max_size_face = results[face][3]
+                            max_size_face_indicator = face
+                    if max_size_face >= 200:
+                        if face_flag == 0:
+                            speak("인식되었습니다.")
+                        if results[max_size_face_indicator][0] < 500 or results[max_size_face_indicator][0] + results[max_size_face_indicator][3] > 1200:
+                            speak("가운데로 서주세요.")
+
+                    elif max_size_face >= 100 and max_size_face < 200:
+                        speak("조금 더 가까이 와주세요.")
+                    elif max_size_face < 100:
+                        pass
+                    face_flag = 1
+            else: face_flag = 0
+            print(face_flag)
 
             cv2.imshow('facenet', img)
 
