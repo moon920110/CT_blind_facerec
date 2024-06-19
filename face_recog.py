@@ -41,6 +41,7 @@ class FaceRecog:
         print("Start Face Recognition")
         flag_time = time.time()
         face_flag = 0
+        insik_flag = 0
         while True:
 
             ret, img = self.cam.read()
@@ -84,17 +85,22 @@ class FaceRecog:
                             max_size_face = results[face][3]
                             max_size_face_indicator = face
                     if max_size_face >= 200:
-                        if face_flag == 0:
-                            speak("인식되었습니다.")
                         if results[max_size_face_indicator][0] < 500 or results[max_size_face_indicator][0] + results[max_size_face_indicator][3] > 1200:
                             speak("가운데로 서주세요.")
+                            insik_flag = 0
+                        elif face_flag == 1 and insik_flag == 0:
+                            speak("인식되었습니다.")
+                            insik_flag = 1
 
                     elif max_size_face >= 100 and max_size_face < 200:
                         speak("조금 더 가까이 와주세요.")
+                        insik_flag = 0
                     elif max_size_face < 100:
                         pass
                     face_flag = 1
-            else: face_flag = 0
+            else:
+                face_flag = 0
+                insik_flag = 0
             print(face_flag)
 
             cv2.imshow('facenet', img)
