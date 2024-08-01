@@ -2,13 +2,34 @@ import cv2
 from gtts import gTTS
 import playsound
 import time
+from ffpyplayer.player import MediaPlayer
 
+male_video_path='babyshark.mp4'
+female_video_path='pororo.mp4'
 
 def speak(text):
     tts = gTTS(text=text, lang='ko')
     filename = 'voice.mp3'
     tts.save(filename)
     playsound.playsound(filename, block=False)
+
+def PlayVideo(video_path):
+    video=cv2.VideoCapture(video_path)
+    player = MediaPlayer(video_path)
+    while True:
+        grabbed, frame=video.read()
+        audio_frame, val = player.get_frame()
+        if not grabbed:
+            print("End of video")
+            break
+        if cv2.waitKey(28) & 0xFF == ord("q"):
+            break
+        cv2.imshow("Video", frame)
+        if val != 'eof' and audio_frame is not None:
+            #audio
+            img, t = audio_frame
+    video.release()
+    cv2.destroyAllWindows()
 
 class FaceRecog:
     def __init__(self):
@@ -91,6 +112,9 @@ class FaceRecog:
                         elif face_flag == 1 and insik_flag == 0:
                             speak("인식되었습니다.")
                             insik_flag = 1
+                            if self.gender_list[gender] == 'Male': PlayVideo(male_video_path)
+                            else: PlayVideo(female_video_path)
+
 
                     elif max_size_face >= 100 and max_size_face < 200:
                         speak("조금 더 가까이 와주세요.")
