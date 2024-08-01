@@ -91,10 +91,13 @@ class FaceRecog:
                 age_preds = self.age_net.forward()
                 age = age_preds.argmax()
 
-                info = self.gender_list[gender] + ' ' + self.age_list[age]
+                height_mappling = int(190 - y/10)
+
+                info = self.gender_list[gender] + ' ' + self.age_list[age] + ' ' + str(height_mappling)
 
                 cv2.rectangle(img, (x, y), (x + w, y + h), (255, 255, 255), thickness=2)
                 cv2.putText(img, info, (x, y - 15), 0, 0.5, (0, 255, 0), 1)
+                print(y)
 
             if len(results) >= 1:
                 if time.time() - flag_time >= 3:
@@ -105,7 +108,7 @@ class FaceRecog:
                         if results[face][3] >= max_size_face:
                             max_size_face = results[face][3]
                             max_size_face_indicator = face
-                    if max_size_face >= 200:
+                    if max_size_face >= 100:
                         if results[max_size_face_indicator][0] < 500 or results[max_size_face_indicator][0] + results[max_size_face_indicator][3] > 1200:
                             speak("가운데로 서주세요.")
                             insik_flag = 0
