@@ -60,6 +60,9 @@ class FaceRecog:
         self.width = None
         self.height = None
         self.image_center = None
+
+        self.enter_region = False
+
         cv2.namedWindow('face')
         self._camera_ready(0)
 
@@ -90,23 +93,24 @@ class FaceRecog:
             gender = rec['dominant_gender']
             race = rec['dominant_race']
             height_mappling = int(190 - self._y / 10)
-            self.info = f'{emo} {age} {gender} {race} {str(height_mappling)}'
             print(rec)
-            if gender == 'Man':
-                PlayVideo(male_video_path)
-            else:
-                PlayVideo(female_video_path)
+            # self.info = f'{emo} {age} {gender} {race} {str(height_mappling)}'
+            self.info = {
+                'emotion': emo.lower(),
+                'age': age,
+                'gender': gender.lower(),
+                'race': race.lower(),
+                'height': height_mappling
+            }
 
         except Exception as e:
             print(e)
 
-    #TODO: analysis 인식된 if로 migration하고 한 번만 동작하도록 수정할 것 + 한 사람 당 한 번만 동작하도록 할 것
     def face_detect(self):
         print('start face recog')
         flag_time = time.time()
         while True:
             if self.gray is not None and self.img is not None:
-                face_flag = 0
                 faces = self.cascade.detectMultiScale(self.gray,
                                                            scaleFactor=1.1,
                                                            minNeighbors=5,
@@ -121,25 +125,23 @@ class FaceRecog:
                 self._h = h
                 largest_face = self.img[int(y):int(y + h), int(x):int(x + h)].copy()
 
-                if time.time() - flag_time >= 3:
+                if time.time() - flag_time >= 2:
                     if self._w < 250:
                         speak("한 걸음 가까이 와주세요.")
                     elif self._w > 350:
                         speak("한 걸음 뒤로 가주세요.")
                     else:
                         if self._x < self.img.shape[1] / 3:
-                            speak("한 걸음 오른쪽으로 가주세요.")
-                        elif self._x + self._w > self.img.shape[1] * 2 / 3:
                             speak("한 걸음 왼쪽으로 가주세요.")
-                        # elif face_flag == 1 and not self.recog:
+                        elif self._x + self._w > self.img.shape[1] * 2 / 3:
+                            speak("한 걸음 오른쪽으로 가주세요.")
                         else:
+                            self.enter_region = True
                             speak("인식되었습니다. 잠시만 기다려주세요.")
                             self.face_analysis(largest_face)
-                    flag_time = time.time()
 
-                    face_flag = 1
-                else:
-                    face_flag = 0
+                    flag_time = time.time()
+        print('end face recog')
 
     def video_detector(self):
         print("Start cam")
@@ -155,10 +157,10 @@ class FaceRecog:
                 if self.info is not None:
                     cv2.putText(self.img, self.info, (self._x, self._y - 15), 0, 0.5, (0, 255, 0), 1)
 
-            cv2.imshow('face', self.img)
+            # cv2.imshow('face', self.img)
 
-            if cv2.waitKey(1) > 0:
-                break
+            # if cv2.waitKey(1) > 0:
+            #     break
 
     def run(self):
         # video = multiprocessing.Process(target=self.video_detector)
@@ -169,7 +171,7 @@ class FaceRecog:
         detect.start()
         # analysis.start()
 
-        self.video_detector()
+        # self.video_detector()
 
         # video.join()
         detect.join()
