@@ -5,3 +5,5 @@ tf_keras
 gtts
 playsound
 ffpyplayer
+requests
+kivy
