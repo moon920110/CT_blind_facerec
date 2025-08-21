@@ -65,10 +65,17 @@ class MainTaskScreen(Screen):
 
         # Timer
         self._timer = 0
+        self._correct_timer = 0
 
-        self._ERROR_RANGE_X = 50
-        self._CORRECT_SIZE_X_MIN = 150
-        self._CORRECT_SIZE_X_MAX = 210
+        # Will be initialized when screen is about to enter (manager is available then)
+        # Set values at on_pre_enter, not here!
+        self._CAMERA_WIDTH = None
+        self._CAMERA_HEIGHT = None
+        self._WIDTH_RATIO = None
+        self._HEIGHT_RATIO = None
+        self._ERROR_RANGE_X = None
+        self._CORRECT_SIZE_X_MIN = None
+        self._CORRECT_SIZE_X_MAX = None
 
         self._is_correct_size = False
         self._is_correct_position = False
@@ -80,15 +87,28 @@ class MainTaskScreen(Screen):
 
 
     def on_pre_enter(self):
+        self._reset_state()
+        self._init_camera_params()
+
+    def _reset_state(self):
         self._timer = 0
+        self._correct_timer = 0
         self._smoothed_rect = None
         self._is_correct_size = False
         self._is_correct_position = False
         self._start_analysis = False
         self.manager.analysis.init()
-
         self.text.text = ""
 
+    def _init_camera_params(self):
+        # Initialize camera-dependent values now that manager is attached
+        self._CAMERA_WIDTH = self.manager.face_recognition.cam_width or 640
+        self._CAMERA_HEIGHT = self.manager.face_recognition.cam_height or 480
+        self._WIDTH_RATIO = self._CAMERA_WIDTH / 640.0
+        self._HEIGHT_RATIO = self._CAMERA_HEIGHT / 480.0
+        self._ERROR_RANGE_X = int(50 * self._WIDTH_RATIO)
+        self._CORRECT_SIZE_X_MIN = int(130 * self._WIDTH_RATIO)
+        self._CORRECT_SIZE_X_MAX = int(150 * self._WIDTH_RATIO)
 
     def update_camera(self, dt):
         if self.manager.current != 'main':
@@ -96,25 +116,48 @@ class MainTaskScreen(Screen):
 
         self._timer += dt
 
-        # If camera is not ready, return
-        if not self.manager.face_recognition.ret:
+        # Acquire frame safely
+        frame = self._get_frame()
+        if frame is None:
             return
 
-        # Get frame
-        frame = self.manager.face_recognition.img
-
-        # If analysis is done, go to result screen
-        if self._start_analysis and self.manager.analysis.state == "done":
-            self._start_analysis = False
-            self.manager.current = 'result'
-
         # If face is detected, draw rectangle
-        elif not self._start_analysis and self.manager.analysis.state == "idle" and self.manager.face_recognition.has_face:
+        if self.manager.face_recognition.has_face:
             # self.draw_standard_line(frame)
             self.draw_rectangle(frame)
-            self.check_correct_position()
+        else:
+            self._correct_timer = 0
+
+        # If analysis is done, go to result screen
+        if self._start_analysis and self.manager.analysis.state == "done" and self.manager.analysis.info is not None:
+            
+            # If error, return 
+            if 'error' in self.manager.analysis.info:
+                self.manager.analysis.init()
+                self._start_analysis = False
+                self._correct_timer = 0
+                self.print_text("다시 분석 중입니다.\n잠시만 기다려주세요.", force=True)
+                return
+            
+            # If success, go to result screen
+            self._start_analysis = False
+            self.print_text("분석이 완료되었습니다.", force=True)
+            self.manager.current = 'result'
+
+        # If face is detected, check correct position
+        elif not self._start_analysis and self.manager.analysis.state == "idle" and self.manager.face_recognition.has_face:
+            self.check_correct_position(dt)
         
         self.show_frame(frame)
+
+    def _get_frame(self):
+        # If camera is not ready or frame missing, return None
+        if not self.manager.face_recognition.ret:
+            return None
+        img = self.manager.face_recognition.img
+        if img is None:
+            return None
+        return img.copy()
 
 
     def draw_rectangle(self, frame):
@@ -124,25 +167,27 @@ class MainTaskScreen(Screen):
         h = self.manager.face_recognition._h
 
         self._smoothed_rect = smooth_rect(self._smoothed_rect, (x, y, w, h), self._SMOOTH_ALPHA)
-        sx, sy, sw, sh = [int(v) for v in self._smoothed_rect] 
+        sx, sy, sw, sh = [int(v) for v in self._smoothed_rect]
 
         color = (0, 255, 0) if self._is_correct_size else (0, 0, 255)
 
         cv2.rectangle(frame, (sx, sy), (sx + sw, sy + sh), color, thickness=2)
-        center = (int(sx + sw/2), int(sy + sh/2))
-        # cv2.putText(frame, f"{w}x{h}", (center[0], center[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        # cv2.circle(frame, center, 5, color, -1)
+        center = (int(sx + sw/2), int(sy + sh/2))   
 
+        # Draw for debug
+        cv2.putText(frame, f"({int(x/self._WIDTH_RATIO)},{int(y/self._HEIGHT_RATIO)})", (center[0], center[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        cv2.putText(frame, f"{int(w/self._WIDTH_RATIO)}x{int(h/self._HEIGHT_RATIO)}", (center[0], center[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        cv2.circle(frame, center, 5, color, -1)
+
+        arrow_size = 40 * self._WIDTH_RATIO
         if not self._is_correct_position:
-            p1 = (center[0] + 40, center[1]) if center[0] > self.manager.face_recognition.cam_width/2 else (center[0] - 40, center[1])
-            p2 = (center[0] - 40, center[1]) if center[0] > self.manager.face_recognition.cam_width/2 else (center[0] + 40, center[1])
+            p1 = (int(center[0] + arrow_size), int(center[1])) if center[0] > self._CAMERA_WIDTH/2 else (int(center[0] - arrow_size), int(center[1]))
+            p2 = (int(center[0] - arrow_size), int(center[1])) if center[0] > self._CAMERA_WIDTH/2 else (int(center[0] + arrow_size), int(center[1]))
             cv2.arrowedLine(frame, p1, p2, (0, 0, 255), 2, tipLength=0.5)
 
-
-    def show_frame(self, frame):
-        # Crop the sides to fix aspect to 9:16 (portrait) without rotation
+    def crop_frame(self, frame, ratio=9/16):
         src_h, src_w = frame.shape[0], frame.shape[1]
-        target_ratio = 9 / 16.0  # width / height
+        target_ratio = ratio
 
         target_w_from_h = int(src_h * target_ratio)
         if src_w >= target_w_from_h:
@@ -153,6 +198,11 @@ class MainTaskScreen(Screen):
             target_h_from_w = int(src_w / target_ratio)
             y_start = (src_h - target_h_from_w) // 2
             cropped = frame[y_start:y_start + target_h_from_w, :]
+        return cropped
+
+
+    def show_frame(self, frame):
+        cropped = self.crop_frame(frame)
 
         dst_w, dst_h = Window.size
         resized = cv2.resize(cropped, (dst_w, dst_h), interpolation=cv2.INTER_LINEAR)
@@ -165,55 +215,65 @@ class MainTaskScreen(Screen):
         self.image.texture = img_texture
          
     def draw_standard_line(self, frame):
-        camera_width = self.manager.face_recognition.cam_width or frame.shape[1]
-        cx = int(camera_width / 2)
+        cx = int(self._CAMERA_WIDTH / 2)
         ex = int(self._ERROR_RANGE_X)
         cv2.line(frame, (cx, 0), (cx, frame.shape[0]), (0, 0, 255), 2)
         cv2.line(frame, (cx - ex, 0), (cx - ex, frame.shape[0]), (0, 0, 255), 2)
         cv2.line(frame, (cx + ex, 0), (cx + ex, frame.shape[0]), (0, 0, 255), 2)
 
-    def check_correct_position(self):
-        
-        def print_text(text, force=False):
-            if self._timer > 2 or force:
-                self.text.text = text
-                speak(text)
-                self._timer = 0
+    def print_text(self, text, force=False):
+        if self._timer > 2 or force:
+            self.text.text = text
+            speak(text)
+            self._timer = 0
 
+    def check_correct_position(self, dt):
         if self._timer > 1:
             self.text.text = ""
         
         # Check size of face
         self._is_correct_size = True
         if self.manager.face_recognition._w < self._CORRECT_SIZE_X_MIN:
+            print("size too small", self.manager.face_recognition._w, self._CORRECT_SIZE_X_MIN)
             self._is_correct_size = False
-            print_text("한 걸음 가까이 와주세요.")
+            self._correct_timer = 0
+            self.print_text("한 걸음 가까이 와주세요.")
         
         elif self.manager.face_recognition._w > self._CORRECT_SIZE_X_MAX:
+            print("size too large", self.manager.face_recognition._w, self._CORRECT_SIZE_X_MAX)
             self._is_correct_size = False
-            print_text("한 걸음 뒤로 가주세요.")
+            self._correct_timer = 0
+            self.print_text("한 걸음 뒤로 가주세요.")
 
         # Check position of face
         current_x = self.manager.face_recognition._x + self.manager.face_recognition._w / 2
-        camera_width = self.manager.face_recognition.cam_width
 
         self._is_correct_position = True
-        if current_x > camera_width/2 + self._ERROR_RANGE_X:
+        if current_x > (self._CAMERA_WIDTH / 2.0) + self._ERROR_RANGE_X:
             self._is_correct_position = False
-            print_text("한 걸음 왼쪽으로 가주세요.")
+            self._correct_timer = 0
+            self.print_text("한 걸음 왼쪽으로 가주세요.")
         
-        elif current_x < camera_width/2 - self._ERROR_RANGE_X:
+        elif current_x < (self._CAMERA_WIDTH / 2.0) - self._ERROR_RANGE_X:
             self._is_correct_position = False
-            print_text("한 걸음 오른쪽으로 가주세요.")
+            self._correct_timer = 0
+            self.print_text("한 걸음 오른쪽으로 가주세요.")
         
         # If face is in the correct position and has correct size, start analysis
         # 안내 멘트 및 분석을 백그라운드에서 처리하여 프레임 수집이 멈추지 않도록 함
         if self._is_correct_size and self._is_correct_position and not self._start_analysis:
+            
+            # First 3 seconds (in timer), print text
+            self._correct_timer += dt
+            if self._correct_timer < 1:
+                self.print_text("분석 중입니다.\n잠시만 기다려주세요.")
+                return 
+                
             self._start_analysis = True
-            print_text("인식되었습니다.\n잠시만 기다려주세요.", force=True)
+            self.print_text("분석 중입니다.\n잠시만 기다려주세요.", force=True)
             face_img = self.manager.face_recognition.largest_face.copy() if self.manager.face_recognition.largest_face is not None else None
-            face_y = int(self.manager.face_recognition._y) if self.manager.face_recognition._y is not None else None
+            face_info = (self.manager.face_recognition._x, self.manager.face_recognition._y, self.manager.face_recognition._w, self.manager.face_recognition._h)
             if face_img is not None:
-                threading.Thread(target=self.manager.analysis.run_analysis_worker, args=(face_img, face_y), daemon=True).start()
+                threading.Thread(target=self.manager.analysis.run_analysis_worker, args=(face_img, face_info), daemon=True).start()
 
     

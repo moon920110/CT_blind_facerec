@@ -18,7 +18,7 @@ class MyScreenManager(ScreenManager):
         # Face recognition
         # Camera is turned on when FaceRecog is initialized
         self.face_recognition = FaceRecog()
-        self.analysis = Analysis()
+        self.analysis = Analysis(self.face_recognition)
 
         # Add screens
         self.add_widget(IntroScreen(name='init'))

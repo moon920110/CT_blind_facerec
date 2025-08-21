@@ -9,15 +9,17 @@ import requests
 font_path = './data/Pretendard-Regular.otf'
 
 class IntroScreen(Screen):
+    _FONT_SIZE = 60
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
 
-        label = Label(text="어서 오세요 국립광주과학관입니다.", font_size=32, font_name=font_path)
+        label = Label(text="어서 오세요 국립광주과학관입니다.", font_size=self._FONT_SIZE, font_name=font_path)
         layout.add_widget(label)
 
-        start_button = Button(text="시작하기", size_hint=(1, 0.2), font_size=30, font_name=font_path)
+        start_button = Button(text="시작하기", size_hint=(1, 0.2), font_size=self._FONT_SIZE, font_name=font_path)
         start_button.bind(on_press=self.go_to_main)
         layout.add_widget(start_button)
 

@@ -43,13 +43,17 @@ class FaceRecog:
         self.cam_center = None
 
         # Turn on camera
-        self._camera_ready(0)
+        self._camera_ready(1)
 
     def _camera_ready(self, cam_num=-1):
         # video capture from camera
         self.cam = cv2.VideoCapture(cam_num)
+        self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1920 )
+        self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
         self.cam_width = int(self.cam.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.cam_height = int(self.cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        print(f'camera width: {self.cam_width}, height: {self.cam_height}')
         self.cam_center = (self.cam_width // 2, self.cam_height // 2)
         print(f'camera open: {self.cam.isOpened()}')
 
@@ -75,7 +79,8 @@ class FaceRecog:
                 time.sleep(0.005)
                 continue
 
-            self.img = cv2.flip(frame, 1)
+            self.img = cv2.flip(frame, 1) 
+
             self.gray = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY)
 
             # If gray or img is None, continue
@@ -89,6 +94,31 @@ class FaceRecog:
                                                         minSize=(20, 20),
                                                         )
             
+            # 9:16 비율 중심 ROI 계산 및 ROI 밖 얼굴 제거
+            img_h, img_w = self.img.shape[0], self.img.shape[1]
+            target_w_from_h = int(img_h * 9 / 16)
+            if img_w >= target_w_from_h:
+                x0 = (img_w - target_w_from_h) // 2
+                y0 = 0
+                x1 = x0 + target_w_from_h
+                y1 = img_h
+            else:
+                target_h_from_w = int(img_w * 16 / 9)
+                y0 = (img_h - target_h_from_w) // 2
+                x0 = 0
+                y1 = y0 + target_h_from_w
+                x1 = img_w
+
+            roi_cx, roi_cy = (x0 + x1) // 2, (y0 + y1) // 2
+
+            faces_in_roi = []
+            for (fx, fy, fw, fh) in faces:
+                # 얼굴 전체가 ROI 안에 있을 때만 인정 (보다 느슨하게 하려면 중심점만 체크)
+                if fx >= x0 and fy >= y0 and (fx + fw) <= x1 and (fy + fh) <= y1:
+                    faces_in_roi.append((fx, fy, fw, fh))
+
+            faces = faces_in_roi
+
             # If no faces are detected, continue
             if len(faces) == 0:
                 self.has_face = False
