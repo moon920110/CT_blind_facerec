@@ -34,6 +34,13 @@ def smooth_rect(prev_rect, target_rect, alpha):
 	)
 
 class MainTaskScreen(Screen):
+
+    _DRAW_FACE_RECT = True
+    _DRAW_STANDARD_LINE = False
+    _DRAW_ARROW = True
+    _DRAW_FACE_POSITION = True
+    _DRAW_FACE_SIZE = True
+
     def __init__(self, **kwargs):
         print("MainTaskScreen init")
 
@@ -107,8 +114,8 @@ class MainTaskScreen(Screen):
         self._WIDTH_RATIO = self._CAMERA_WIDTH / 640.0
         self._HEIGHT_RATIO = self._CAMERA_HEIGHT / 480.0
         self._ERROR_RANGE_X = int(50 * self._WIDTH_RATIO)
-        self._CORRECT_SIZE_X_MIN = int(130 * self._WIDTH_RATIO)
-        self._CORRECT_SIZE_X_MAX = int(150 * self._WIDTH_RATIO)
+        self._CORRECT_SIZE_X_MIN = int(110 * self._WIDTH_RATIO)
+        self._CORRECT_SIZE_X_MAX = int(140 * self._WIDTH_RATIO)
 
     def update_camera(self, dt):
         if self.manager.current != 'main':
@@ -121,10 +128,13 @@ class MainTaskScreen(Screen):
         if frame is None:
             return
 
+        # Optional standard guide lines
+        if self._DRAW_STANDARD_LINE:
+            self.draw_standard_line(frame)
+
         # If face is detected, draw rectangle
         if self.manager.face_recognition.has_face:
-            # self.draw_standard_line(frame)
-            self.draw_rectangle(frame)
+            self.draw_face_shape(frame)
         else:
             self._correct_timer = 0
 
@@ -159,8 +169,7 @@ class MainTaskScreen(Screen):
             return None
         return img.copy()
 
-
-    def draw_rectangle(self, frame):
+    def draw_face_shape(self, frame):
         x = self.manager.face_recognition._x
         y = self.manager.face_recognition._y
         w = self.manager.face_recognition._w
@@ -171,16 +180,20 @@ class MainTaskScreen(Screen):
 
         color = (0, 255, 0) if self._is_correct_size else (0, 0, 255)
 
-        cv2.rectangle(frame, (sx, sy), (sx + sw, sy + sh), color, thickness=2)
-        center = (int(sx + sw/2), int(sy + sh/2))   
-
-        # Draw for debug
-        cv2.putText(frame, f"({int(x/self._WIDTH_RATIO)},{int(y/self._HEIGHT_RATIO)})", (center[0], center[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        cv2.putText(frame, f"{int(w/self._WIDTH_RATIO)}x{int(h/self._HEIGHT_RATIO)}", (center[0], center[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        cv2.circle(frame, center, 5, color, -1)
+        # Rectangle and center
+        if self._DRAW_FACE_RECT:
+            cv2.rectangle(frame, (sx, sy), (sx + sw, sy + sh), color, thickness=2)
+        
+        center = (int(sx + sw/2), int(sy + sh/2))
+    
+        # Debug overlays
+        if self._DRAW_FACE_POSITION:
+            cv2.putText(frame, f"({int(x/self._WIDTH_RATIO)},{int(y/self._HEIGHT_RATIO)})", (center[0], center[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        if self._DRAW_FACE_SIZE:
+            cv2.putText(frame, f"{int(w/self._WIDTH_RATIO)}x{int(h/self._HEIGHT_RATIO)}", (center[0], center[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         arrow_size = 40 * self._WIDTH_RATIO
-        if not self._is_correct_position:
+        if self._DRAW_ARROW and not self._is_correct_position:
             p1 = (int(center[0] + arrow_size), int(center[1])) if center[0] > self._CAMERA_WIDTH/2 else (int(center[0] - arrow_size), int(center[1]))
             p2 = (int(center[0] - arrow_size), int(center[1])) if center[0] > self._CAMERA_WIDTH/2 else (int(center[0] + arrow_size), int(center[1]))
             cv2.arrowedLine(frame, p1, p2, (0, 0, 255), 2, tipLength=0.5)
@@ -260,10 +273,9 @@ class MainTaskScreen(Screen):
             self.print_text("한 걸음 오른쪽으로 가주세요.")
         
         # If face is in the correct position and has correct size, start analysis
-        # 안내 멘트 및 분석을 백그라운드에서 처리하여 프레임 수집이 멈추지 않도록 함
         if self._is_correct_size and self._is_correct_position and not self._start_analysis:
             
-            # First 3 seconds (in timer), print text
+            # After 1 second of being in the correct position and size, start analysis
             self._correct_timer += dt
             if self._correct_timer < 1:
                 self.print_text("분석 중입니다.\n잠시만 기다려주세요.")

@@ -56,14 +56,14 @@ class ResultScreen(Screen):
     def on_pre_enter(self):
         info = (self.manager.analysis.info or {}).copy()
         self._labels['emotion'].text = f"감정: {self._EMONTION_IN_KOREAN.get(info.get('emotion', ''), '')}"
-        self._labels['age'].text = f"나이: {info.get('age', '')}세"
+        self._labels['age'].text = f"나이: {info.get('age', '')}"
         self._labels['gender'].text = f"성별: {self._GENDER_IN_KOREAN.get(info.get('gender', ''), '')}"
         self._labels['race'].text = f"인종: {self._RACE_IN_KOREAN.get(info.get('race', ''), '')}"
-        self._labels['height'].text = f"키: {info.get('height', '')}cm"
+        self._labels['height'].text = f"키: {info.get('height', '')}"
         
         msg = "오류가 발생했습니다. 다시 시작해주세요."
         if 'error' not in info:
-            msg = "A 코스로 안내드리겠습니다." if info.get('age', 0) > 18 else "B 코스로 안내드리겠습니다."
+            msg = "A 코스로 안내드리겠습니다." if info.get('age', '') not in ('영유아', '어린이', '청소년') else "B 코스로 안내드리겠습니다."
 
         self._labels['msg'].text = msg
         speak(msg, force=True)
