@@ -5,11 +5,14 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import Screen
+from kivy.uix.button import Button
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 from kivy.core.window import Window
 
-from utils.speak import speak
+from utils.speak import speak, stop_speaking
+from utils.config import config
+from utils.kivy_settings_window import show_settings_popup
 
 font_path = './data/Pretendard-Regular.otf'
 
@@ -34,12 +37,14 @@ def smooth_rect(prev_rect, target_rect, alpha):
 	)
 
 class MainTaskScreen(Screen):
-
-    _DRAW_FACE_RECT = True
-    _DRAW_STANDARD_LINE = False
-    _DRAW_ARROW = True
-    _DRAW_FACE_POSITION = True
-    _DRAW_FACE_SIZE = True
+    
+    def get_display_options(self):
+        """Get display options from config"""
+        return config.get_display_options()
+    
+    def get_position_control_params(self):
+        """Get position control parameters from config"""
+        return config.get_position_control_params()
 
     def __init__(self, **kwargs):
         print("MainTaskScreen init")
@@ -63,6 +68,20 @@ class MainTaskScreen(Screen):
             instance.height = instance.texture_size[1] + 10
         self.text.bind(size=_bind_text_size, texture_size=_on_texture_size)
         self.layout.add_widget(self.text)
+
+        # Settings button in top-right corner
+        self.settings_button = Button(
+            text="⚙", 
+            font_size=30, 
+            font_name=font_path,
+            size_hint=(None, None),
+            size=(60, 60),
+            pos_hint={'right': 0.98, 'top': 0.98},
+            background_color=(0.2, 0.2, 0.2, 0.8),
+            color=(1, 1, 1, 1)
+        )
+        self.settings_button.bind(on_press=self.open_settings)
+        self.layout.add_widget(self.settings_button)
 
         self.add_widget(self.layout)
 
@@ -91,11 +110,20 @@ class MainTaskScreen(Screen):
 
         # Update camera
         Clock.schedule_interval(self.update_camera, 1.0 / 30)
+        
+        # Check for camera changes
+        Clock.schedule_interval(self.check_camera_changes, 1.0)  # Check every second
 
 
     def on_pre_enter(self):
+        # Stop any residual audio when entering main to avoid overlap
+        stop_speaking()
         self._reset_state()
         self._init_camera_params()
+
+    def on_leave(self, *args):
+        # Stop any ongoing TTS when leaving the screen
+        stop_speaking()
 
     def _reset_state(self):
         self._timer = 0
@@ -113,15 +141,23 @@ class MainTaskScreen(Screen):
         self._CAMERA_HEIGHT = self.manager.face_recognition.cam_height or 480
         self._WIDTH_RATIO = self._CAMERA_WIDTH / 640.0
         self._HEIGHT_RATIO = self._CAMERA_HEIGHT / 480.0
-        self._ERROR_RANGE_X = int(50 * self._WIDTH_RATIO)
-        self._CORRECT_SIZE_X_MIN = int(110 * self._WIDTH_RATIO)
-        self._CORRECT_SIZE_X_MAX = int(140 * self._WIDTH_RATIO)
+        self._update_position_params()
+    
+    def _update_position_params(self):
+        """Update position control parameters from config (called in real-time)"""
+        pos_params = self.get_position_control_params()
+        self._ERROR_RANGE_X = int(pos_params.get('error_range_x', 50) * self._WIDTH_RATIO)
+        self._CORRECT_SIZE_X_MIN = int(pos_params.get('correct_size_x_min', 110) * self._WIDTH_RATIO)
+        self._CORRECT_SIZE_X_MAX = int(pos_params.get('correct_size_x_max', 140) * self._WIDTH_RATIO)
 
     def update_camera(self, dt):
         if self.manager.current != 'main':
             return
 
         self._timer += dt
+        
+        # Update position parameters in real-time
+        self._update_position_params()
 
         # Acquire frame safely
         frame = self._get_frame()
@@ -129,8 +165,12 @@ class MainTaskScreen(Screen):
             return
 
         # Optional standard guide lines
-        if self._DRAW_STANDARD_LINE:
+        display_options = self.get_display_options()
+        if display_options.get('draw_standard_line', False):
             self.draw_standard_line(frame)
+        # Debug height lines
+        if display_options.get('show_height_lines', False):
+            self.draw_height_lines(frame)
 
         # If face is detected, draw rectangle
         if self.manager.face_recognition.has_face:
@@ -150,9 +190,10 @@ class MainTaskScreen(Screen):
                 return
             
             # If success, go to result screen
-            self._start_analysis = False
-            self.print_text("분석이 완료되었습니다.", force=True)
-            self.manager.current = 'result'
+            self.print_text("분석이 완료되었습니다.", no_speak=True)
+            if not display_options.get('disable_auto_navigate', False):
+                self._start_analysis = False
+                self.manager.current = 'result'
 
         # If face is detected, check correct position
         elif not self._start_analysis and self.manager.analysis.state == "idle" and self.manager.face_recognition.has_face:
@@ -180,20 +221,23 @@ class MainTaskScreen(Screen):
 
         color = (0, 255, 0) if self._is_correct_size else (0, 0, 255)
 
+        # Get display options from config
+        display_options = self.get_display_options()
+        
         # Rectangle and center
-        if self._DRAW_FACE_RECT:
+        if display_options.get('draw_face_rect', True):
             cv2.rectangle(frame, (sx, sy), (sx + sw, sy + sh), color, thickness=2)
         
         center = (int(sx + sw/2), int(sy + sh/2))
     
         # Debug overlays
-        if self._DRAW_FACE_POSITION:
+        if display_options.get('draw_face_position', True):
             cv2.putText(frame, f"({int(x/self._WIDTH_RATIO)},{int(y/self._HEIGHT_RATIO)})", (center[0], center[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        if self._DRAW_FACE_SIZE:
+        if display_options.get('draw_face_size', True):
             cv2.putText(frame, f"{int(w/self._WIDTH_RATIO)}x{int(h/self._HEIGHT_RATIO)}", (center[0], center[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         arrow_size = 40 * self._WIDTH_RATIO
-        if self._DRAW_ARROW and not self._is_correct_position:
+        if display_options.get('draw_arrow', True) and not self._is_correct_position:
             p1 = (int(center[0] + arrow_size), int(center[1])) if center[0] > self._CAMERA_WIDTH/2 else (int(center[0] - arrow_size), int(center[1]))
             p2 = (int(center[0] - arrow_size), int(center[1])) if center[0] > self._CAMERA_WIDTH/2 else (int(center[0] + arrow_size), int(center[1]))
             cv2.arrowedLine(frame, p1, p2, (0, 0, 255), 2, tipLength=0.5)
@@ -234,10 +278,24 @@ class MainTaskScreen(Screen):
         cv2.line(frame, (cx - ex, 0), (cx - ex, frame.shape[0]), (0, 0, 255), 2)
         cv2.line(frame, (cx + ex, 0), (cx + ex, frame.shape[0]), (0, 0, 255), 2)
 
-    def print_text(self, text, force=False):
+    def draw_height_lines(self, frame):
+        # Draw horizontal red lines for each height threshold with labels
+        height_map = self.get_position_control_params()
+        # But actual thresholds are from config height_mapping (labels to y)
+        mapping = config.get_height_mapping()
+        # mapping: {"150cm 미만": int, ...} in base units; multiply by ratio
+        for label, base_y in mapping.items():
+            y_px = int(base_y * self._HEIGHT_RATIO)
+            y_px = max(0, min(frame.shape[0]-1, y_px))
+            cv2.line(frame, (0, y_px), (frame.shape[1], y_px), (0, 0, 255), 1)
+            # Draw simple label; OpenCV can't use TTF fonts, so use ASCII-friendly or minimal text
+            cv2.putText(frame, f"{label}", (int(frame.shape[1]/2), max(0, y_px - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 1)
+
+    def print_text(self, text, force=False, no_speak=False):
         if self._timer > 2 or force:
             self.text.text = text
-            speak(text)
+            if not no_speak:
+                speak(text)
             self._timer = 0
 
     def check_correct_position(self, dt):
@@ -247,13 +305,13 @@ class MainTaskScreen(Screen):
         # Check size of face
         self._is_correct_size = True
         if self.manager.face_recognition._w < self._CORRECT_SIZE_X_MIN:
-            print("size too small", self.manager.face_recognition._w, self._CORRECT_SIZE_X_MIN)
+            # print("size too small", self.manager.face_recognition._w, self._CORRECT_SIZE_X_MIN)
             self._is_correct_size = False
             self._correct_timer = 0
             self.print_text("한 걸음 가까이 와주세요.")
         
         elif self.manager.face_recognition._w > self._CORRECT_SIZE_X_MAX:
-            print("size too large", self.manager.face_recognition._w, self._CORRECT_SIZE_X_MAX)
+            # print("size too large", self.manager.face_recognition._w, self._CORRECT_SIZE_X_MAX)
             self._is_correct_size = False
             self._correct_timer = 0
             self.print_text("한 걸음 뒤로 가주세요.")
@@ -288,4 +346,20 @@ class MainTaskScreen(Screen):
             if face_img is not None:
                 threading.Thread(target=self.manager.analysis.run_analysis_worker, args=(face_img, face_info), daemon=True).start()
 
+    def check_camera_changes(self, dt):
+        """Check if camera settings have changed and reload if needed"""
+        if config.is_camera_changed():
+            print("Camera settings changed, reloading camera...")
+            try:
+                self.manager.face_recognition.reload_camera()
+                # Reinitialize camera parameters after camera reload
+                self._init_camera_params()
+                config.mark_camera_reloaded()
+                print("Camera reloaded successfully")
+            except Exception as e:
+                print(f"Failed to reload camera: {e}")
+    
+    def open_settings(self, instance):
+        """Open settings popup"""
+        show_settings_popup()
     

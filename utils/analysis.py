@@ -10,16 +10,10 @@ import torchvision.transforms as T
 from deepface import DeepFace
 import cv2
 
+from utils.config import config
+
 
 class Analysis:
-    _HEIGHT_BY_Y = {
-        '150cm 미만': 150,
-        '150cm 대': 160,
-        '160cm 대': 170,
-        '170cm 대': 180,
-        '180cm 이상': 190,
-    }
-
     # FairFace (multi-task) age config (res34_fair_align_multi_7_20190809.pt)
     _DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     # [영유아(0-2), 어린이(3-9), 청소년(10-19), 20대(20-29), 30대(30-39), 40대(40-49), 50대(50-59), 60대(60-69), 70대(70+)]
@@ -56,6 +50,10 @@ class Analysis:
                 print(f"FairFace age weights not found: {self._WEIGHTS_PATH}")
         except Exception as exc:
             print(f"Failed to init FairFace age model: {exc}")
+    
+    def get_height_mapping(self):
+        """Get height mapping from config"""
+        return config.get_height_mapping()
 
     def init_camera_info(self):
         self._CAMERA_WIDTH = self.face_recognition.cam_width
@@ -86,8 +84,10 @@ class Analysis:
 
             (_, y, _, _) = face_info
             height_mapping = "150cm 미만"
-            for k, v in self._HEIGHT_BY_Y.items():
-                if y > v * self._HEIGHT_RATIO:
+            height_by_y = self.get_height_mapping()
+            for k, v in height_by_y.items():
+                # Use the top of the face box (y) as the head-top proxy
+                if y < v * self._HEIGHT_RATIO:
                     height_mapping = k
                     continue
                 else:

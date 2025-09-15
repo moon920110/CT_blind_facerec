@@ -1,22 +1,32 @@
 import math
 import threading
+import os
+import platform
 import subprocess
 
 import cv2
 import time
 
 from utils.speak import speak
+from utils.config import config
 
 male_video_path='babyshark.mp4'
 female_video_path='pororo.mp4'
 
-def PlayVideo(video_path):
+def PlayVideo(video_path: str) -> bool:
+    """Open video with default OS handler (non-blocking if possible)."""
     try:
-        subprocess.run(['open', '-a', 'IINA', video_path])
-    except Exception as e:
-        print(f'{e}')
-
-    return False
+        system = platform.system()
+        if system == 'Windows':
+            os.startfile(video_path)  # type: ignore[attr-defined]
+        elif system == 'Darwin':
+            subprocess.Popen(['open', video_path])
+        else:
+            subprocess.Popen(['xdg-open', video_path])
+        return True
+    except Exception as exc:
+        print(f'Failed to open video: {exc}')
+        return False
 
 class FaceRecog:
     def __init__(self):
@@ -41,15 +51,26 @@ class FaceRecog:
         self.cam_width = None
         self.cam_height = None
         self.cam_center = None
+        
+        # Threading
+        self.detect_thread = None
+        self.running = False
 
         # Turn on camera
-        self._camera_ready(1)
+        self._camera_ready()
+        self.start_detection()
 
     def _camera_ready(self, cam_num=-1):
         # video capture from camera
-        self.cam = cv2.VideoCapture(cam_num)
-        self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1920 )
-        self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        camera_index = config.get_camera_index() if cam_num == -1 else cam_num
+        self.cam = cv2.VideoCapture(camera_index)
+        
+        # Get camera resolution from config
+        camera_width = config.get('camera.width', 1920)
+        camera_height = config.get('camera.height', 1080)
+        
+        self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, camera_width)
+        self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_height)
 
         self.cam_width = int(self.cam.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.cam_height = int(self.cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -68,10 +89,23 @@ class FaceRecog:
         largest_face = max(faces, key=score)
         return largest_face
 
+    def start_detection(self):
+        """Start face detection thread"""
+        if self.detect_thread is None or not self.detect_thread.is_alive():
+            self.running = True
+            self.detect_thread = threading.Thread(target=self.face_detect, daemon=True)
+            self.detect_thread.start()
+    
+    def stop_detection(self):
+        """Stop face detection thread"""
+        self.running = False
+        if self.detect_thread and self.detect_thread.is_alive():
+            self.detect_thread.join(timeout=1.0)
+
     def face_detect(self):
         print('start face recog')
 
-        while True:
+        while self.running:
             # Read frame with proper guards to avoid crashes/freezes
             self.ret, frame = self.cam.read()
             if not self.ret or frame is None:
@@ -87,11 +121,12 @@ class FaceRecog:
             if self.gray is None or self.img is None:
                 continue
 
-            # Detect faces
+            # Detect faces using config parameters
+            detection_params = config.get_face_detection_params()
             faces = self.cascade.detectMultiScale(self.gray,
-                                                        scaleFactor=1.1,
-                                                        minNeighbors=5,
-                                                        minSize=(20, 20),
+                                                        scaleFactor=detection_params.get('scale_factor', 1.1),
+                                                        minNeighbors=detection_params.get('min_neighbors', 5),
+                                                        minSize=tuple(detection_params.get('min_size', [20, 20])),
                                                         )
             
             # 9:16 비율 중심 ROI 계산 및 ROI 밖 얼굴 제거
@@ -135,12 +170,38 @@ class FaceRecog:
             self.largest_face = self.img[int(y):int(y + h), int(x):int(x + h)].copy()
 
 
+    def reload_camera(self):
+        """Reload camera with new settings from config"""
+        print("Reloading camera...")
+        
+        # Stop current detection
+        print("Stopping detection thread...")
+        self.stop_detection()
+        
+        # Release current camera
+        if self.cam is not None:
+            print("Releasing current camera...")
+            self.cam.release()
+            time.sleep(0.1)  # Give time for camera to release
+        
+        # Reinitialize camera with new settings
+        print("Reinitializing camera with new settings...")
+        self._camera_ready()
+        
+        # Restart detection
+        print("Restarting detection thread...")
+        self.start_detection()
+        
+        print("Camera reloaded successfully")
+    
     def run(self):
-        detect = threading.Thread(target=self.face_detect)
-
-        detect.start()
-
-        detect.join()
+        """Run face detection (for standalone use)"""
+        self.start_detection()
+        try:
+            while self.running:
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            self.stop_detection()
 
 
 if __name__ == '__main__':

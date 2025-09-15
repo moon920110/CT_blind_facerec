@@ -3,7 +3,7 @@ from kivy.uix.screenmanager import Screen
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 
-from utils.speak import speak
+from utils.speak import speak, stop_speaking
 
 font_path = './data/Pretendard-Regular.otf'
 
@@ -46,10 +46,14 @@ class ResultScreen(Screen):
             'gender': Label(text="성별: ", font_size=self._FONT_SIZE, font_name=font_path),
             'race': Label(text="인종: ", font_size=self._FONT_SIZE, font_name=font_path),
             'height': Label(text="키: ", font_size=self._FONT_SIZE, font_name=font_path),
-            'msg': Label(text="", font_size=self._FONT_SIZE, font_name=font_path),
+            'msg': Label(text="", font_size=self._FONT_SIZE, font_name=font_path, halign='center', valign='middle'),
         }
         for k in ['emotion', 'age', 'gender', 'race', 'height', 'msg']:
             self.layout.add_widget(self._labels[k])
+        # Make msg label truly center by binding text_size to widget size
+        def _bind_msg_size(instance, value):
+            instance.text_size = instance.size
+        self._labels['msg'].bind(size=_bind_msg_size)
 
         self.layout.add_widget(Button(text="다시 시작", font_size=self._FONT_SIZE, font_name=font_path, on_press=self.restart))
 
@@ -63,10 +67,12 @@ class ResultScreen(Screen):
         
         msg = "오류가 발생했습니다. 다시 시작해주세요."
         if 'error' not in info:
-            msg = "A 코스로 안내드리겠습니다." if info.get('age', '') not in ('영유아', '어린이', '청소년') else "B 코스로 안내드리겠습니다."
+            msg = "분석이 완료되었습니다.\n"
+            msg += "A 코스로 안내드리겠습니다." if info.get('age', '') not in ('영유아', '어린이', '청소년') else "B 코스로 안내드리겠습니다."
 
         self._labels['msg'].text = msg
         speak(msg, force=True)
 
     def restart(self, *args):
+        stop_speaking()
         self.manager.current = 'main'
