@@ -62,6 +62,9 @@ class MainTaskScreen(Screen):
                            pos_hint={'y': 0.12})
         
         # Ensure text is centered across width
+        self._wait_few_seconds = True
+        self._wait_few_seconds_time = 2
+        self._wait_few_seconds_timer = 0
         def _bind_text_size(instance, value):
             instance.text_size = (instance.width, None)
         def _on_texture_size(instance, value):
@@ -134,6 +137,8 @@ class MainTaskScreen(Screen):
         self._start_analysis = False
         self.manager.analysis.init()
         self.text.text = ""
+        self._wait_few_seconds = True
+        self._wait_few_seconds_timer = 0
 
     def _init_camera_params(self):
         # Initialize camera-dependent values now that manager is attached
@@ -153,6 +158,17 @@ class MainTaskScreen(Screen):
     def update_camera(self, dt):
         if self.manager.current != 'main':
             return
+
+        # Wait few seconds when entering main task screen
+        if self._wait_few_seconds:
+            self._wait_few_seconds_timer += dt
+            
+            if self._wait_few_seconds_timer < self._wait_few_seconds_time:
+                return
+            else:
+                self._wait_few_seconds = False
+                self._wait_few_seconds_timer = 0
+
 
         self._timer += dt
         
