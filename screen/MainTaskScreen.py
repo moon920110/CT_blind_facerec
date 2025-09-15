@@ -202,7 +202,7 @@ class MainTaskScreen(Screen):
                 self.manager.analysis.init()
                 self._start_analysis = False
                 self._correct_timer = 0
-                self.print_text("다시 분석 중입니다.\n잠시만 기다려주세요.", force=True)
+                self.print_text("분석 중입니다.\n잠시만 기다려주세요.", force=True)
                 return
             
             # If success, go to result screen
