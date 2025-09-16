@@ -1,3 +1,5 @@
+import sys
+
 from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager
 
@@ -9,6 +11,15 @@ from screen.ResultScreen import ResultScreen
 # Import face recognition module
 from utils.face_recog import FaceRecog
 from utils.analysis import Analysis
+
+
+# Prevent console output from being garbled
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+if hasattr(sys.stdin, "reconfigure"):
+    sys.stdin.reconfigure(encoding="utf-8")
 
 # Screen manager
 class MyScreenManager(ScreenManager):
