@@ -162,13 +162,9 @@ class MainTaskScreen(Screen):
         # Wait few seconds when entering main task screen
         if self._wait_few_seconds:
             self._wait_few_seconds_timer += dt
-            
-            if self._wait_few_seconds_timer < self._wait_few_seconds_time:
-                return
-            else:
+            if self._wait_few_seconds_timer > self._wait_few_seconds_time:
                 self._wait_few_seconds = False
                 self._wait_few_seconds_timer = 0
-
 
         self._timer += dt
         
@@ -212,7 +208,7 @@ class MainTaskScreen(Screen):
                 self.manager.current = 'result'
 
         # If face is detected, check correct position
-        elif not self._start_analysis and self.manager.analysis.state == "idle" and self.manager.face_recognition.has_face:
+        elif not self._wait_few_seconds and not self._start_analysis and self.manager.analysis.state == "idle" and self.manager.face_recognition.has_face:
             self.check_correct_position(dt)
         
         self.show_frame(frame)
