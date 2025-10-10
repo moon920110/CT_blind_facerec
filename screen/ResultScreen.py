@@ -68,7 +68,7 @@ class ResultScreen(Screen):
         msg = "오류가 발생했습니다. 다시 시작해주세요."
         if 'error' not in info:
             msg = "분석이 완료되었습니다.\n"
-            msg += "A 코스로 안내드리겠습니다." if info.get('age', '') not in ('영유아', '어린이', '청소년') else "B 코스로 안내드리겠습니다."
+            msg += "먼저 자연현상 체험부터 시작할게요." if info.get('age', '') in ('영유아', '어린이', '청소년') else "해양과학 체험을 먼저 안내하겠습니다."
 
         self._labels['msg'].text = msg
         speak(msg, force=True)
