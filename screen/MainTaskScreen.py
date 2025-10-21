@@ -86,6 +86,20 @@ class MainTaskScreen(Screen):
         self.settings_button.bind(on_press=self.open_settings)
         self.layout.add_widget(self.settings_button)
 
+        # Back button in top-left corner to return to init screen
+        self.back_button = Button(
+            text="←",
+            font_size=30,
+            font_name=font_path,
+            size_hint=(None, None),
+            size=(60, 60),
+            pos_hint={'x': 0.02, 'top': 0.98},
+            background_color=(0.2, 0.2, 0.2, 0.8),
+            color=(1, 1, 1, 1)
+        )
+        self.back_button.bind(on_press=self.go_back)
+        self.layout.add_widget(self.back_button)
+
         self.add_widget(self.layout)
 
         # smoothing state
@@ -249,7 +263,7 @@ class MainTaskScreen(Screen):
             cv2.putText(frame, f"{int(w/self._WIDTH_RATIO)}x{int(h/self._HEIGHT_RATIO)}", (center[0], center[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         arrow_size = 40 * self._WIDTH_RATIO
-        if display_options.get('draw_arrow', True) and not self._is_correct_position:
+        if display_options.get('draw_arrow', True) and not self._wait_few_seconds and not self._is_correct_position:
             p1 = (int(center[0] + arrow_size), int(center[1])) if center[0] > self._CAMERA_WIDTH/2 else (int(center[0] - arrow_size), int(center[1]))
             p2 = (int(center[0] - arrow_size), int(center[1])) if center[0] > self._CAMERA_WIDTH/2 else (int(center[0] + arrow_size), int(center[1]))
             cv2.arrowedLine(frame, p1, p2, (0, 0, 255), 2, tipLength=0.5)
@@ -374,4 +388,8 @@ class MainTaskScreen(Screen):
     def open_settings(self, instance):
         """Open settings popup"""
         show_settings_popup()
-    
+
+    def go_back(self, instance):
+        """Navigate back to init screen"""
+        stop_speaking()
+        self.manager.current = 'init'
