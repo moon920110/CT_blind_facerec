@@ -1,1 +1,9 @@
 .idea/
+.cursor/
+__pycache__/
+*.pyc
+tmp_audio/
+voice.mp3
+config.json
+dist
+build
